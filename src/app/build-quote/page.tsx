@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import "./build-quote.css";
 
@@ -344,8 +344,6 @@ export default function BuildQuotePage() {
   const [currentStep, setCurrentStep] = useState(0);
 
   /* ── Browser back button: go one step back instead of leaving the page ── */
-  const stepRef = useRef(0);
-  stepRef.current = currentStep;
   const [selections, setSelections] = useState<Record<string, string[]>>({});
   const [showCongrats, setShowCongrats] = useState(false);
   const [showInstantReel, setShowInstantReel] = useState(false);
@@ -361,17 +359,19 @@ export default function BuildQuotePage() {
 
   const activeEvent = EVENTS.find(e => e.id === activeTab) || null;
 
-  /* Listen for browser back button — intercept to go one step back in the wizard */
+  /* Listen for browser back/forward — read the step from history state.
+     When the back button is pressed, the browser has ALREADY navigated to the
+     previous history entry. We read e.state.step to sync the React UI. */
   useEffect(() => {
-    if (!activeTab) return;
-    const handlePopState = () => {
-      if (stepRef.current > 0) {
-        setCurrentStep(prev => Math.max(0, prev - 1));
+    const handlePopState = (e: PopStateEvent) => {
+      if (e.state && e.state.wizard) {
+        setCurrentStep(e.state.step);
+        setShowCongrats(false);
       }
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, [activeTab]);
+  }, []);
 
   /* ── helpers ── */
   const stepKey = (idx: number) => `${activeTab}-${idx}`;
@@ -434,12 +434,15 @@ export default function BuildQuotePage() {
   const handleNext = () => {
     if (!activeEvent) return;
     if (currentStep < activeEvent.steps.length - 1) {
-      setCurrentStep(currentStep + 1);
-      window.history.pushState({ wizardStep: currentStep + 1 }, "");
+      const next = currentStep + 1;
+      setCurrentStep(next);
+      window.history.pushState({ wizard: true, step: next }, "");
     }
-    else setShowCongrats(true);
+    else { setShowCongrats(true); window.history.pushState({ wizard: true, step: currentStep, congrats: true }, ""); }
   };
-  const handlePrev = () => { if (currentStep > 0) setCurrentStep(currentStep - 1); };
+  /* Custom Previous button: call history.back() which triggers popstate,
+     which reads e.state.step and updates currentStep — one consistent path. */
+  const handlePrev = () => { if (currentStep > 0) window.history.back(); };
 
   const resetAll = () => {
     setActiveTab(null); setCurrentStep(0); setSelections({}); setShowCongrats(false);
@@ -932,7 +935,7 @@ export default function BuildQuotePage() {
           <p style={{ fontSize: 16, color: "rgba(255,255,255,0.6)", marginBottom: 60, maxWidth: 500, margin: "0 auto 60px" }}>Select the type of event you&apos;re planning and we&apos;ll customize your quotation</p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 20 }}>
             {[...EVENTS, { id: "instant-reel", label: "Instant Reel", icon: "⚡", description: "Same-day highlight reel delivery — 1 edited reel per hour" }].map(ev => (
-              <div key={ev.id} onClick={() => { if (ev.id === 'instant-reel') { setShowInstantReel(true); setFormSubmitted(false); setFormData({ fullName: '', eventDate: '', venue: '', phone: '', email: '', eventDescription: '' }); } else { setActiveTab(ev.id); setCurrentStep(0); setSelections({}); setShowCongrats(false); setPhotographerCounts({}); setDaysCounts({}); setStepMessages({}); window.history.pushState({ wizardStep: 0 }, ""); } }}
+              <div key={ev.id} onClick={() => { if (ev.id === 'instant-reel') { setShowInstantReel(true); setFormSubmitted(false); setFormData({ fullName: '', eventDate: '', venue: '', phone: '', email: '', eventDescription: '' }); } else { setActiveTab(ev.id); setCurrentStep(0); setSelections({}); setShowCongrats(false); setPhotographerCounts({}); setDaysCounts({}); setStepMessages({}); window.history.pushState({ wizard: true, step: 0 }, ""); } }}
                 style={{ padding: "36px 20px", borderRadius: 20, border: "2px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", cursor: "pointer", transition: "all 0.4s cubic-bezier(0.4,0,0.2,1)", textAlign: "center" }}
                 onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(212,160,23,0.5)"; e.currentTarget.style.background = "rgba(212,160,23,0.08)"; e.currentTarget.style.transform = "translateY(-6px)"; e.currentTarget.style.boxShadow = "0 16px 40px rgba(212,160,23,0.15)"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; e.currentTarget.style.background = "rgba(255,255,255,0.03)"; e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}>
